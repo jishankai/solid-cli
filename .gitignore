@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment variables
+.env
+
+# Configuration (keep examples)
+config.json
+
+# Reports
+*.md
+!README.md
+*.pdf
+reports/
+
+# Logs (allow logs/README.md but ignore actual log files)
+*.log
+logs/
+!logs/README.md
+!logs/.gitkeep
+logs/llm-requests/*.json
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+*.sh

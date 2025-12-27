@@ -1,0 +1,36 @@
+{
+  "name": "macos-security-analysis-cli",
+  "version": "1.0.0",
+  "description": "macOS System & Security Analysis Agent CLI with LLM-powered insights",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "macos-analyze": "./src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "keywords": [
+    "macos",
+    "security",
+    "analysis",
+    "cli",
+    "agent",
+    "llm"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.30.0",
+    "chalk": "^5.3.0",
+    "execa": "^9.5.2",
+    "inquirer": "^12.2.0",
+    "markdown-pdf": "^11.0.0",
+    "openai": "^4.77.3",
+    "ora": "^8.1.1"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
