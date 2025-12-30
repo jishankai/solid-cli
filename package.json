@@ -1,5 +1,5 @@
 {
-  "name": "solid-cli",
+  "name": "@jishankai/solid-cli",
   "version": "1.0.0",
   "description": "MacOS System & Security Analysis Agent CLI with LLM-powered insights",
   "type": "module",
@@ -27,7 +27,7 @@
     "auditing",
     "forensics"
   ],
-  "author": "jishankai<jishankai@gmail.com>",
+  "author": "Kai <jishankai@gmail.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
