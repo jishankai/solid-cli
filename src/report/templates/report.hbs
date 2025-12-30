@@ -1,0 +1,465 @@
+{{!-- Unified Report Template for both PDF (HTML) and Markdown --}}
+<div class="header">
+{{#ifEquals format 'markdown'}}
+# MacOS Security Analysis Report
+
+**Generated:** {{formatDate metadata.generatedAt}} at {{formatTime metadata.generatedAt}}
+**Hostname:** {{system.hostname}}
+**macOS Version:** {{system.osVersion}}
+**Analysis Mode:** {{uppercase system.mode}}
+**Overall Risk Level:** {{markdownRiskBadge summary.overallRisk}}
+**Report ID:** {{metadata.reportId}}
+{{else}}
+<h1>MacOS Security Analysis Report</h1>
+<div class="subtitle">
+  Generated: {{formatDate metadata.generatedAt}} at {{formatTime metadata.generatedAt}} | 
+  Hostname: {{system.hostname}} | 
+  macOS Version: {{system.osVersion}} | 
+  Analysis Mode: {{uppercase system.mode}} | 
+  Overall Risk: <span class="risk-badge risk-{{summary.overallRisk}}">{{uppercase summary.overallRisk}}</span>
+</div>
+{{/ifEquals}}
+</div>
+
+{{!-- Executive Summary --}}
+<div class="executive-summary">
+{{#ifEquals format 'markdown'}}
+## Executive Summary
+
+This report contains the results of a comprehensive {{system.mode}} analysis of the system.
+
+### Key Metrics
+
+{{#ifEquals format 'markdown'}}
+| Metric | Value |
+|--------|-------|
+| Total Findings | {{summary.totalFindings}} |
+| High Risk | {{summary.highRiskFindings}} 🔴 |
+| Medium Risk | {{summary.mediumRiskFindings}} 🟡 |
+| Low Risk | {{summary.lowRiskFindings}} 🟢 |
+| Risk Score | {{calculateRiskScore summary}}/100 |
+{{else}}
+<h2>Executive Summary</h2>
+<p>This report contains the results of a comprehensive {{system.mode}} analysis of the system.</p>
+
+<h3>Key Metrics</h3>
+<div class="metrics-grid">
+  <div class="metric-card">
+    <div class="metric-value">{{summary.totalFindings}}</div>
+    <div class="metric-label">Total Findings</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-value" style="color: #dc2626;">{{summary.highRiskFindings}}</div>
+    <div class="metric-label">High Risk</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-value" style="color: #ca8a04;">{{summary.mediumRiskFindings}}</div>
+    <div class="metric-label">Medium Risk</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-value" style="color: #16a34a;">{{summary.lowRiskFindings}}</div>
+    <div class="metric-label">Low Risk</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-value">{{calculateRiskScore summary}}/100</div>
+    <div class="metric-label">Risk Score</div>
+  </div>
+</div>
+{{/ifEquals}}
+
+### Analysis Phases
+
+{{#ifEquals format 'markdown'}}
+{{#each analysisPhases}}
+#### {{phase}}
+- Status: {{#if completed}}✅ Completed{{else}}⏳ In Progress{{/if}}
+{{#each extensions}}
+- Extension: {{this}}
+{{/each}}
+{{/each}}
+{{else}}
+<div class="section">
+  <h2>Analysis Phases</h2>
+  {{#each analysisPhases}}
+  <div style="margin-bottom: 1rem;">
+    <strong>{{phase}}</strong> - {{#if completed}}✅ Completed{{else}}⏳ In Progress{{/if}}
+    {{#each extensions}}
+    <div style="margin-left: 1rem; color: #64748b;">Extension: {{this}}</div>
+    {{/each}}
+  </div>
+  {{/each}}
+</div>
+{{/ifEquals}}
+
+{{else}}
+{{/ifEquals}}
+</div>
+
+{{!-- Risk Distribution Chart --}}
+{{#ifEquals format 'markdown'}}
+## Risk Distribution
+
+| Risk Level | Count | Percentage |
+|------------|-------|------------|
+| 🔴 High | {{visualizations.riskDistribution.high}} | {{visualizations.riskDistribution.highPercentage}}% |
+| 🟡 Medium | {{visualizations.riskDistribution.medium}} | {{visualizations.riskDistribution.mediumPercentage}}% |
+| 🟢 Low | {{visualizations.riskDistribution.low}} | {{visualizations.riskDistribution.lowPercentage}}% |
+
+{{else}}
+<div class="section">
+  <h2>Risk Distribution</h2>
+  <div class="risk-distribution">
+    <div class="risk-segment">
+      <div class="risk-count" style="color: {{riskColor 'high'}};">{{visualizations.riskDistribution.high}}</div>
+      <div class="risk-percentage">{{visualizations.riskDistribution.highPercentage}}%</div>
+      <div class="risk-label">High</div>
+    </div>
+
+    <div class="risk-segment">
+      <div class="risk-count" style="color: {{riskColor 'medium'}};">{{visualizations.riskDistribution.medium}}</div>
+      <div class="risk-percentage">{{visualizations.riskDistribution.mediumPercentage}}%</div>
+      <div class="risk-label">Medium</div>
+    </div>
+
+    <div class="risk-segment">
+      <div class="risk-count" style="color: {{riskColor 'low'}};">{{visualizations.riskDistribution.low}}</div>
+      <div class="risk-percentage">{{visualizations.riskDistribution.lowPercentage}}%</div>
+      <div class="risk-label">Low</div>
+    </div>
+  </div>
+</div>
+{{/ifEquals}}
+
+{{!-- Detailed Findings --}}
+{{#ifEquals format 'markdown'}}
+## Detailed Findings
+
+{{#each findings}}
+### {{name}}
+
+**Risk Level:** {{markdownRiskBadge overallRisk}}
+**Total Findings:** {{summary.total}}
+
+{{#ifEquals summary.high 0}}
+{{else}}
+#### 🔴 High Risk Findings ({{summary.high}})
+
+{{#each findings}}
+{{#ifEquals risk 'high'}}
+##### {{type}}
+
+{{description}}
+
+{{#if command}}**Command:** `{{command}}`{{/if}}
+{{#if path}}**Path:** `{{path}}`{{/if}}
+{{#if program}}**Program:** `{{program}}`{{/if}}
+{{#if pid}}**PID:** {{pid}}{{/if}}
+
+{{#if risks}}
+**Risk Factors:**
+{{#each risks}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+{{/ifEquals}}
+{{/each}}
+{{/ifEquals}}
+
+{{#ifEquals summary.medium 0}}
+{{else}}
+#### 🟡 Medium Risk Findings ({{summary.medium}})
+
+{{#each findings}}
+{{#ifEquals risk 'medium'}}
+##### {{type}}
+
+{{description}}
+
+{{#if command}}**Command:** `{{command}}`{{/if}}
+{{#if path}}**Path:** `{{path}}`{{/if}}
+{{#if program}}**Program:** `{{program}}`{{/if}}
+{{#if pid}}**PID:** {{pid}}{{/if}}
+
+{{#if risks}}
+**Risk Factors:**
+{{#each risks}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+{{/ifEquals}}
+{{/each}}
+{{/ifEquals}}
+
+{{#ifEquals summary.low 0}}
+{{else}}
+#### 🟢 Low Risk Findings ({{summary.low}})
+
+{{#each findings}}
+{{#ifEquals risk 'low'}}
+##### {{type}}
+
+{{description}}
+
+{{#if command}}**Command:** `{{command}}`{{/if}}
+{{#if path}}**Path:** `{{path}}`{{/if}}
+{{#if program}}**Program:** `{{program}}`{{/if}}
+{{#if pid}}**PID:** {{pid}}{{/if}}
+
+{{#if risks}}
+**Risk Factors:**
+{{#each risks}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+{{/ifEquals}}
+{{/each}}
+{{/ifEquals}}
+
+{{#if error}}
+❌ **Error:** {{error}}
+
+{{else}}
+✅ No significant findings.
+
+{{/if}}
+
+{{/each}}
+
+{{else}}
+<div class="section">
+  <h2>Detailed Findings</h2>
+  {{#each findings}}
+  <div class="agent-section">
+    <h3>{{name}}</h3>
+    <div class="finding-header">
+      <span class="finding-title">{{name}} Agent</span>
+      <span class="finding-risk risk-{{overallRisk}}">{{riskBadge overallRisk}}</span>
+    </div>
+    
+    <div class="finding-summary">
+      <strong>Total Findings:</strong> {{summary.total}} 
+      ({{summary.high}} High, {{summary.medium}} Medium, {{summary.low}} Low)
+    </div>
+
+    {{#if error}}
+    <div class="finding-error">❌ Error: {{error}}</div>
+    {{else}}
+
+    {{#ifGt summary.total 0}}
+    {{#each findings}}
+    <div class="finding">
+      <div class="finding-header">
+        <span class="finding-title">{{type}}</span>
+        <span class="finding-risk risk-{{risk}}">{{riskBadge risk}}</span>
+      </div>
+      
+      <div class="finding-description">{{description}}</div>
+      
+      {{#if (hasAny command path program pid)}}
+      <div class="finding-details">
+        {{#if command}}
+        <div class="detail-row">
+          <span class="detail-label">Command:</span> <code>{{command}}</code>
+        </div>
+        {{/if}}
+        
+        {{#if path}}
+        <div class="detail-row">
+          <span class="detail-label">Path:</span> <code>{{path}}</code>
+        </div>
+        {{/if}}
+        
+        {{#if program}}
+        <div class="detail-row">
+          <span class="detail-label">Program:</span> <code>{{program}}</code>
+        </div>
+        {{/if}}
+        
+        {{#if pid}}
+        <div class="detail-row">
+          <span class="detail-label">PID:</span> {{pid}}
+        </div>
+        {{/if}}
+      </div>
+      {{/if}}
+      
+      {{#if risks}}
+      <div class="finding-details">
+        <div class="detail-label">Risk Factors:</div>
+        <ul style="margin: 0.25rem 0; padding-left: 0.85rem;">
+          {{#each risks}}
+          <li style="margin: 0.1rem 0;">{{this}}</li>
+          {{/each}}
+        </ul>
+      </div>
+      {{/if}}
+    </div>
+    {{/each}}
+    {{else}}
+    <div class="finding">✅ No significant findings.</div>
+    {{/ifGt}}
+
+    {{/if}}
+  </div>
+  {{/each}}
+</div>
+{{/ifEquals}}
+
+{{!-- Sensitive Data Alerts (always visible if detected) --}}
+{{#if (or sensitivePatterns sensitiveDataAlerts)}}
+  {{#ifEquals format 'markdown'}}
+## Sensitive Data Alerts
+
+{{#if sensitivePatterns.length}}
+**Detected Patterns:**
+{{#each sensitivePatterns}}
+- **{{name}}** — {{count}} occurrence(s){{#if samples}}; samples: {{#each samples}}`{{this}}` {{/each}}{{/if}}
+{{/each}}
+{{/if}}
+
+{{#if sensitiveDataAlerts.length}}
+**Locations:**
+{{#each sensitiveDataAlerts}}
+- **{{pattern}}** — Agent: {{agent}}, Field: {{field}}, Path/Context: `{{path}}` {{#if samples}}(samples: {{#each samples}}`{{this}}` {{/each}}){{/if}}
+{{/each}}
+{{else}}
+- (No specific locations captured)
+{{/if}}
+
+> AI analysis was blocked to avoid sending the above data. Remove/redact and rerun, or continue with report-only mode.
+  {{else}}
+<div class="section">
+  <h2>Sensitive Data Alerts</h2>
+  <div style="background: #fff7ed; border: 1px solid #f97316; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem;">
+    {{#if sensitivePatterns.length}}
+    <div style="margin-bottom: 0.75rem;"><strong>Detected Patterns:</strong></div>
+    <ul style="margin: 0 0 1rem 1rem;">
+      {{#each sensitivePatterns}}
+      <li><strong>{{name}}</strong> — {{count}} occurrence(s){{#if samples}}; samples: {{#each samples}}<code>{{this}}</code> {{/each}}{{/if}}</li>
+      {{/each}}
+    </ul>
+    {{/if}}
+
+    <div style="margin-bottom: 0.5rem;"><strong>Locations:</strong></div>
+    {{#if sensitiveDataAlerts.length}}
+    <ul style="margin: 0; padding-left: 1rem;">
+      {{#each sensitiveDataAlerts}}
+      <li><strong>{{pattern}}</strong> — Agent: {{agent}}, Field: {{field}}, Path/Context: <code>{{path}}</code>{{#if samples}} (samples: {{#each samples}}<code>{{this}}</code> {{/each}}){{/if}}</li>
+      {{/each}}
+    </ul>
+    {{else}}
+    <p style="margin: 0;">(No specific locations captured)</p>
+    {{/if}}
+
+    <p style="margin-top: 0.75rem; color: #475569;">AI analysis was blocked to avoid sending the above data. Remove/redact and rerun, or continue with report-only mode.</p>
+  </div>
+</div>
+  {{/ifEquals}}
+{{/if}}
+
+
+{{!-- Recommendations --}}
+{{#if recommendations}}
+{{#ifEquals format 'markdown'}}
+## Recommendations
+
+{{#each recommendations}}
+### {{title}} ({{uppercase priority}} Priority)
+
+{{description}}
+
+**Actions:**
+{{#each actions}}
+- {{this}}
+{{/each}}
+
+{{/each}}
+
+{{else}}
+<div class="recommendations">
+  <h3>Recommendations</h3>
+  {{#each recommendations}}
+  <div class="recommendation">
+    <h4>{{title}} ({{uppercase priority}} Priority)</h4>
+    <p>{{description}}</p>
+    <ul class="recommendation-actions">
+      {{#each actions}}
+      <li>{{this}}</li>
+      {{/each}}
+    </ul>
+  </div>
+  {{/each}}
+</div>
+{{/ifEquals}}
+{{/if}}
+
+{{!-- Compliance Information --}}
+{{#ifEquals format 'markdown'}}
+## Compliance Framework Mapping
+
+{{#each compliance}}
+### {{@key}}
+{{#if this.length}}
+- {{#each this}}- {{this}}{{/each}}
+{{else}}
+- No findings mapped to this framework
+{{/if}}
+
+{{/each}}
+
+{{else}}
+{{#if compliance}}
+<div class="section">
+  <h2>Compliance Framework Mapping</h2>
+  {{#each compliance}}
+  <div style="margin-bottom: 1rem;">
+    <strong>{{@key}}:</strong>
+    {{#if this.length}}
+    <ul style="margin: 0.5rem 0; padding-left: 1rem;">
+      {{#each this}}
+      <li>{{this}}</li>
+      {{/each}}
+    </ul>
+    {{else}}
+    <span style="color: #16a34a;">✅ No findings mapped to this framework</span>
+    {{/if}}
+  </div>
+  {{/each}}
+</div>
+{{/if}}
+{{/ifEquals}}
+
+{{!-- Appendix --}}
+{{#ifEquals format 'markdown'}}
+## Appendix: Raw Data
+
+```json
+{{json results}}
+```
+
+{{else}}
+<div class="section">
+  <h2>Appendix: Raw Data</h2>
+  <pre style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 1rem; font-size: 9px; overflow-x: auto;">{{json results}}</pre>
+</div>
+{{/ifEquals}}
+
+{{#ifEquals format 'markdown'}}
+---
+<div class="footer">
+**Report Generated:** {{formatDate metadata.generatedAt}} at {{formatTime metadata.generatedAt}}
+**Report ID:** {{metadata.reportId}}
+**Version:** {{metadata.version}}
+</div>
+{{else}}
+<div class="footer">
+  <p>
+    <strong>Report Generated:</strong> {{formatDate metadata.generatedAt}} at {{formatTime metadata.generatedAt}} | 
+    <strong>Report ID:</strong> {{metadata.reportId}} | 
+    <strong>Version:</strong> {{metadata.version}}
+  </p>
+</div>
+{{/ifEquals}}

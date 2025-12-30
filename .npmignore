@@ -1,0 +1,24 @@
+# Dependencies and artifacts
+node_modules
+logs
+logs/*
+reports
+reports/*
+*.log
+*.tgz
+*.pdf
+
+# Environment / secrets
+.env
+.env.*
+*.local
+
+# Config overrides (keep default shipped via files array)
+config/*.json
+!config/default.json
+
+# OS junk
+.DS_Store
+
+# Test scripts and local tooling
+test-*.js
