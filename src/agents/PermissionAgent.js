@@ -112,16 +112,19 @@ export class PermissionAgent extends BaseAgent {
         riskLevel = 'medium';
       }
 
-      // Check 2: Non-standard app paths with critical permissions
-      const isTrustedPath = this.trustedPaths.some(path => perm.client.startsWith(path));
+      const hasAbsolutePath = perm.client && perm.client.startsWith('/');
 
-      if (!isTrustedPath && this.criticalPermissions.includes(perm.service)) {
+      // Check 2: Non-standard app paths with critical permissions
+      // NOTE: system_profiler often returns app names (not paths). Only apply path checks when we actually have a path.
+      const isTrustedPath = hasAbsolutePath && this.trustedPaths.some(path => perm.client.startsWith(path));
+
+      if (hasAbsolutePath && !isTrustedPath && this.criticalPermissions.includes(perm.service)) {
         risks.push('Critical permission granted to non-standard location');
         riskLevel = 'high';
       }
 
       // Check 3: Apps in user directories with permissions
-      if (perm.client.includes('/Users/') && !perm.client.includes('/Applications')) {
+      if (hasAbsolutePath && perm.client.includes('/Users/') && !perm.client.includes('/Applications')) {
         risks.push('Permission granted to app in user directory');
         riskLevel = 'high';
       }
@@ -145,8 +148,11 @@ export class PermissionAgent extends BaseAgent {
         }
       }
 
-      // Only report if there are risks
-      if (risks.length > 0) {
+      // Only report when we have strong enough signals to reduce false positives.
+      // Many legitimate apps have "critical" permissions; that's useful context but can be noisy.
+      // Report high-risk items, or cases where multiple risk indicators are present.
+      const shouldReport = risks.length > 1 || riskLevel === 'high';
+      if (shouldReport) {
         findings.push({
           type: 'privacy_permission',
           app: perm.client,

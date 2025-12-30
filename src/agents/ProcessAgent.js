@@ -1,5 +1,6 @@
 import { BaseAgent } from './BaseAgent.js';
 import { executeShellCommand } from '../utils/commander.js';
+import { getSignatureAssessment } from '../utils/signature.js';
 
 /**
  * ProcessAgent - Analyzes running processes for anomalies
@@ -309,7 +310,10 @@ export class ProcessAgent extends BaseAgent {
 
   async analyze() {
     const processes = await this.getProcessDetails();
-    const findings = this.analyzeProcesses(processes);
+    let findings = this.analyzeProcesses(processes);
+
+    // Reduce false positives: apply signature/Gatekeeper trust to downgrade or drop weak-signal findings.
+    findings = await this.applyTrustHeuristics(findings);
 
     this.results = {
       agent: this.name,
@@ -363,34 +367,7 @@ export class ProcessAgent extends BaseAgent {
    * Resolve executable path with fallbacks to reduce false positives
    */
   async getExecutablePath(pid, commandFallback) {
-    // 1) lsof (often includes absolute path)
-    try {
-      const pathOutput = await executeShellCommand(
-        `lsof -p ${pid} -Fn 2>/dev/null | grep '^n/' | head -1`,
-        { quiet: true }
-      );
-      if (pathOutput) {
-        const resolved = pathOutput.replace('n', '').trim();
-        if (resolved.startsWith('/')) return resolved;
-      }
-    } catch (error) {
-      // ignore
-    }
-
-    // 2) ps comm gives executable name (may include path)
-    try {
-      const commOutput = await executeShellCommand(
-        `ps -p ${pid} -o comm= 2>/dev/null`,
-        { quiet: true }
-      );
-      if (commOutput && commOutput.trim().startsWith('/')) {
-        return commOutput.trim();
-      }
-    } catch (error) {
-      // ignore
-    }
-
-    // 3) ps command column (may include args)
+    // Use ps-based lookups only to avoid macOS privacy prompts from lsof
     try {
       const cmdOutput = await executeShellCommand(
         `ps -p ${pid} -o command= 2>/dev/null`,
@@ -398,6 +375,19 @@ export class ProcessAgent extends BaseAgent {
       );
       if (cmdOutput) {
         const candidate = cmdOutput.trim().split(' ')[0];
+        if (candidate.startsWith('/')) return candidate;
+      }
+    } catch (error) {
+      // ignore
+    }
+
+    try {
+      const commOutput = await executeShellCommand(
+        `ps -p ${pid} -o comm= 2>/dev/null`,
+        { quiet: true }
+      );
+      if (commOutput) {
+        const candidate = commOutput.trim().split(' ')[0];
         if (candidate.startsWith('/')) return candidate;
       }
     } catch (error) {
@@ -506,5 +496,77 @@ export class ProcessAgent extends BaseAgent {
     }
 
     return findings;
+  }
+
+  /**
+   * Apply code-signing/Gatekeeper trust to reduce false positives.
+   *
+   * Strategy:
+   * - Only evaluate findings already considered "report-worthy".
+   * - If an executable is Gatekeeper-accepted and not showing strong malware signals
+   *   (hidden dir, impersonation, elevated-from-user-home, obfuscation), downgrade/drop.
+   *
+   * @param {Array} findings
+   * @returns {Promise<Array>}
+   */
+  async applyTrustHeuristics(findings) {
+    const signatureCache = new Map();
+
+    const enriched = await Promise.all(findings.map(async (finding) => {
+      const assessment = await getSignatureAssessment(finding.path, signatureCache);
+
+      // Attach trust metadata for transparency (useful in reports)
+      const trust = {
+        spctlAccepted: assessment.spctlAccepted,
+        teamIdentifier: assessment.teamIdentifier,
+        signedByApple: assessment.signedByApple,
+        signedByDeveloperId: assessment.signedByDeveloperId
+      };
+
+      const strongSignals = [
+        'System process name running from user directory',
+        'Running from hidden directory',
+        'Elevated privileges from user directory',
+        'Hidden process name (starts with dot)',
+        'Suspicious obfuscated process name pattern',
+        'Suspicious hex-like process name pattern'
+      ];
+
+      const hasStrongSignal = (finding.risks || []).some(r => strongSignals.some(s => r.includes(s)));
+
+      // Apple-signed binaries in system locations with only weak signals should be dropped outright
+      const isAppleSystem = assessment.signedByApple && finding.path && (
+        finding.path.startsWith('/System') || finding.path.startsWith('/usr/libexec') || finding.path.startsWith('/usr/sbin')
+      );
+      if (isAppleSystem && !hasStrongSignal) {
+        return null;
+      }
+
+      // If Gatekeeper accepts it and we only have weak heuristics, downgrade.
+      if (assessment.spctlAccepted && !hasStrongSignal) {
+        // Downgrade medium to low; keep high as-is.
+        if (finding.risk === 'medium') {
+          return {
+            ...finding,
+            risk: 'low',
+            trust,
+            securityNote: 'Gatekeeper accepted (spctl). Downgraded to reduce false positives.'
+          };
+        }
+
+        return {
+          ...finding,
+          trust
+        };
+      }
+
+      return {
+        ...finding,
+        trust
+      };
+    }));
+
+    // Drop low-risk findings entirely to reduce noise (they were only medium before trust evaluation).
+    return enriched.filter(f => f && f.risk !== 'low');
   }
 }

@@ -30,8 +30,8 @@ A **local-first** macOS security and performance analysis tool powered by AI. Th
  │ Agent   │  │ (5 Agents)     │  │ OpenAI/Claude │
  └─────────┘  └────────────────┘  └───────────────┘
       │
-┌─────▼───────────┐
-│ Report Generator│ → Markdown / PDF
+ ┌─────▼───────────┐
+│ Report Manager  │ → Templates → Markdown/PDF
 └─────────────────┘
 ```
 
@@ -43,10 +43,31 @@ A **local-first** macOS security and performance analysis tool powered by AI. Th
 
 ## Installation
 
+### Install from npm (recommended for users)
+
+```bash
+npm install -g solid-cli
+# or run once without installing
+npx solid-cli
+```
+
+Run the CLI with:
+```bash
+macos-analyze
+```
+
+Optional: add API keys as env vars before running:
+```bash
+export OPENAI_API_KEY=sk-...
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+### Local development
+
 1. Clone the repository:
 ```bash
 git clone <repository-url>
-cd analysis-cli
+cd solid-cli
 ```
 
 2. Install dependencies:
@@ -250,7 +271,7 @@ Generated reports include:
 
 ### Project Structure
 ```
-analysis-cli/
+solid-cli/
 ├── src/
 │   ├── agents/          # Analysis agents
 │   │   ├── BaseAgent.js
@@ -262,8 +283,14 @@ analysis-cli/
 │   │   └── PermissionAgent.js
 │   ├── llm/             # LLM integration
 │   │   └── LLMAnalyzer.js
-│   ├── report/          # Report generation
-│   │   └── ReportGenerator.js
+│   ├── report/          # Report generation (Handlebars + Puppeteer)
+│   │   ├── ReportManager.js
+│   │   ├── generators/
+│   │   │   ├── MarkdownGenerator.js
+│   │   │   └── PDFGenerator.js
+│   │   ├── templates/
+│   │   ├── styles/
+│   │   └── utils/
 │   ├── utils/           # Utilities
 │   │   └── commander.js
 │   ├── Orchestrator.js  # Agent coordination
@@ -308,16 +335,22 @@ Some checks require specific permissions:
 Grant these in System Preferences > Security & Privacy > Privacy
 
 ### PDF Generation Fails
-If PDF generation fails, install phantomjs:
-```bash
-npm install -g phantomjs-prebuilt
-```
+Puppeteer generates PDFs. If it cannot launch a browser, reinstall dependencies to fetch Chromium or set `PUPPETEER_EXECUTABLE_PATH` to a local Chrome/Chromium binary.
 
 ### API Rate Limits
 If you encounter rate limits:
 - Use shorter analysis windows
 - Select specific agents only
 - Run in "No LLM" mode and analyze JSON manually
+
+## Publishing to npm (maintainers)
+
+1. Update `package.json` metadata (name/scope, version, repository, bugs, homepage) before publishing.
+2. Clean artifacts: `rm -rf logs reports *.tgz` to keep the tarball minimal.
+3. Verify the package contents (controlled by `files` and `.npmignore`): `npm pack --dry-run`.
+4. Run smoke tests: `node test-basic.js` and `node test-logging.js` (then remove `logs/llm-requests/request-*.json` if created).
+5. Publish: `npm publish --access public` (or add `--tag beta` / `--registry <url>` for prerelease or private registries).
+6. After publishing, record the new version and update the changelog/release notes if applicable.
 
 ## Contributing
 

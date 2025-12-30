@@ -60,54 +60,55 @@ export class NetworkAgent extends BaseAgent {
   }
 
   /**
-   * Get network connections using lsof
+   * Get network connections without triggering macOS privacy prompts
    */
   async getNetworkConnections() {
-    // Use lsof to get network connections
-    const output = await executeShellCommand('lsof -i -P -n');
-    const lines = output.split('\n').slice(1); // Skip header
+    const [tcpOutput, udpOutput] = await Promise.all([
+      executeShellCommand('netstat -anv -p tcp', { quiet: true }),
+      executeShellCommand('netstat -anv -p udp', { quiet: true })
+    ]);
 
+    return [
+      ...this.parseNetstatOutput(tcpOutput, 'TCP'),
+      ...this.parseNetstatOutput(udpOutput, 'UDP')
+    ];
+  }
+
+  /**
+   * Parse netstat output into connection objects
+   */
+  parseNetstatOutput(output, protocol) {
     const connections = [];
+    if (!output) return connections;
 
+    const lines = output.split('\n');
     for (const line of lines) {
-      if (!line.trim()) continue;
-
-      const parts = line.trim().split(/\s+/);
-
-      if (parts.length >= 9) {
-        const command = parts[0];
-        const pid = parseInt(parts[1]);
-        const user = parts[2];
-        const type = parts[7]; // TCP or UDP
-        const state = parts[9] || 'NONE';
-
-        // Parse address:port
-        let localAddr = '';
-        let localPort = '';
-        let remoteAddr = '';
-        let remotePort = '';
-
-        const nameField = parts[8];
-        if (nameField.includes('->')) {
-          const [local, remote] = nameField.split('->');
-          [localAddr, localPort] = this.parseAddress(local);
-          [remoteAddr, remotePort] = this.parseAddress(remote);
-        } else {
-          [localAddr, localPort] = this.parseAddress(nameField);
-        }
-
-        connections.push({
-          command,
-          pid,
-          user,
-          type,
-          localAddr,
-          localPort: parseInt(localPort) || 0,
-          remoteAddr,
-          remotePort: parseInt(remotePort) || 0,
-          state
-        });
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('Active') || trimmed.startsWith('Proto')) {
+        continue;
       }
+
+      const parts = trimmed.split(/\s+/);
+      if (parts.length < 5) continue;
+
+      const local = parts[3];
+      const remote = parts[4];
+      const state = parts[5] || (protocol === 'UDP' ? 'NONE' : 'UNKNOWN');
+
+      const [localAddr, localPort] = this.parseAddress(local);
+      const [remoteAddr, remotePort] = this.parseAddress(remote);
+
+      connections.push({
+        command: '(unknown)',
+        pid: 0,
+        user: 'unknown',
+        type: protocol,
+        localAddr,
+        localPort: parseInt(localPort) || 0,
+        remoteAddr,
+        remotePort: parseInt(remotePort) || 0,
+        state
+      });
     }
 
     return connections;
@@ -119,12 +120,19 @@ export class NetworkAgent extends BaseAgent {
   parseAddress(addr) {
     if (!addr) return ['', ''];
 
-    const lastColon = addr.lastIndexOf(':');
-    if (lastColon === -1) return [addr, ''];
+    if (addr === '*.*' || addr === '*') {
+      return ['*', ''];
+    }
+
+    const separatorIndex = addr.lastIndexOf(':') !== -1
+      ? addr.lastIndexOf(':')
+      : addr.lastIndexOf('.');
+
+    if (separatorIndex === -1) return [addr, ''];
 
     return [
-      addr.substring(0, lastColon),
-      addr.substring(lastColon + 1)
+      addr.substring(0, separatorIndex),
+      addr.substring(separatorIndex + 1)
     ];
   }
 
@@ -178,23 +186,30 @@ export class NetworkAgent extends BaseAgent {
         }
       }
 
-      // Check 5: Hidden process names
-      if (conn.command.startsWith('.') || conn.command.match(/^[a-z0-9]{8,}$/)) {
-        risks.push('Suspicious process name');
-        riskLevel = 'high';
+      // Check 5: Hidden or obfuscated process names (reduce false positives)
+      // lsof "COMMAND" is usually a short name (not a path), and many legitimate daemons are lowercase.
+      // Only treat this as suspicious when the command is not trusted and matches strong obfuscation patterns.
+      if (!effectiveTrusted) {
+        if (conn.command.startsWith('.')) {
+          risks.push('Hidden process name (starts with dot)');
+          riskLevel = 'high';
+        } else if (conn.command.match(/^[a-z]{1,2}[0-9]{6,}$/i)) {
+          risks.push('Suspicious obfuscated process name pattern');
+          riskLevel = 'high';
+        } else if (conn.command.match(/^[0-9a-f]{16,}$/i)) {
+          risks.push('Suspicious hex-like process name pattern');
+          riskLevel = 'high';
+        }
       }
 
-      // Only report if there are risks
-      if (risks.length > 0) {
+      // Only report when we have strong enough signals to reduce false positives.
+      // (high risk) OR (multiple risk indicators)
+      const shouldReport = risks.length > 1 || riskLevel === 'high';
+      if (shouldReport) {
         const connectionType = conn.state === 'LISTEN' ? 'listening' : 'outbound';
         const geo = conn.remoteAddr ? geoLookup[conn.remoteAddr] : undefined;
         if (geo && geo.summary) {
           risks.push(`Geo: ${geo.summary}`);
-        }
-
-        // If we only know a trusted command name and no absolute path, skip low-signal noise
-        if (!hasAbsolutePath && isTrustedCommand && risks.length === 0) {
-          continue;
         }
 
         findings.push({

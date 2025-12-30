@@ -4,6 +4,8 @@ import { readdirSync, readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { parse } from 'path';
 
+import { getSignatureAssessment } from '../utils/signature.js';
+
 /**
  * PersistenceAgent - Detects persistence mechanisms on macOS
  * This is the core security agent
@@ -11,11 +13,27 @@ import { parse } from 'path';
 export class PersistenceAgent extends BaseAgent {
   constructor() {
     super('PersistenceAgent');
-    this.trustedPaths = ['/Applications', '/System', '/usr/bin', '/usr/sbin', '/usr/libexec'];
+    this.trustedPaths = [
+      '/Applications',
+      '/System',
+      '/System/Applications',
+      '/System/Library',
+      '/System/Library/CoreServices',
+      '/System/Library/PrivateFrameworks',
+      '/System/Library/LaunchDaemons',
+      '/System/Library/LaunchAgents',
+      '/usr/bin',
+      '/usr/sbin',
+      '/usr/lib',
+      '/usr/libexec'
+    ];
     this.suspiciousCommands = ['bash', 'sh', 'curl', 'wget', 'python', 'python3', 'perl', 'ruby'];
   }
 
   async analyze() {
+    // Cache signature lookups across all persistence checks to avoid repeated shell calls.
+    this.signatureCache = new Map();
+
     const launchAgents = await this.scanLaunchAgents();
     const launchDaemons = await this.scanLaunchDaemons();
     const loginItems = await this.scanLoginItems();
@@ -140,6 +158,11 @@ export class PersistenceAgent extends BaseAgent {
         riskLevel = 'medium';
       }
 
+      // Check 1b: Code-signing/Gatekeeper trust check (reduces false positives)
+      const signature = await getSignatureAssessment(programPath, this.signatureCache);
+      const isGatekeeperAccepted = signature.spctlAccepted;
+      const isAppleSigned = signature.signedByApple;
+
       // Check 2: Uses suspicious commands
       const programName = parse(programPath).base.toLowerCase();
       if (this.suspiciousCommands.some(cmd => programName.includes(cmd))) {
@@ -166,13 +189,51 @@ export class PersistenceAgent extends BaseAgent {
       }
 
       // Check 6: Program in user home directory
+      // NOTE: Many legitimate apps/dev tools install user LaunchAgents that run from ~/Library.
+      // Treat this as a medium signal unless combined with additional indicators.
       if (programPath.includes('/Users/')) {
         risks.push('Program located in user home directory');
-        riskLevel = 'high';
+        riskLevel = riskLevel === 'low' ? 'medium' : riskLevel;
+
+        // Elevate if running from a hidden directory (common malware tactic)
+        if (programPath.includes('/.')) {
+          risks.push('Program located in hidden directory');
+          riskLevel = 'high';
+        }
       }
 
-      // Only report if there are actual risks
-      if (risks.length > 1 || riskLevel !== 'low') {
+      // If Gatekeeper accepts the target program and we only have weak heuristics,
+      // downgrade/remove the "non-trusted location" signal.
+      const hasStrongSignal = risks.some(r =>
+        r.includes('Potentially impersonates Apple service') ||
+        r.includes('Has network listen sockets configured') ||
+        r.includes('Program located in hidden directory')
+      );
+
+      if ((isGatekeeperAccepted || isAppleSigned) && !hasStrongSignal) {
+        // Remove the most common noisy signal
+        const filteredRisks = risks.filter(r => r !== 'Program path is not in trusted location');
+        risks.length = 0;
+        risks.push(...filteredRisks);
+
+        if (riskLevel === 'medium') {
+          riskLevel = 'low';
+        }
+      }
+
+      // System/Apple-signed items in Apple directories are almost always benign; drop them early
+      const isSystemLocation =
+        plistPath.startsWith('/System/Library') ||
+        programPath.startsWith('/System/Library') ||
+        programPath.startsWith('/usr/libexec');
+
+      if (isAppleSigned && isSystemLocation && !hasStrongSignal) {
+        return null;
+      }
+
+      // Only report when we have strong enough signals to reduce false positives.
+      // (high risk) OR (multiple risk indicators)
+      if (risks.length > 1 || riskLevel === 'high') {
         return {
           type: type.toLowerCase(),
           plist: fileName,
@@ -181,6 +242,12 @@ export class PersistenceAgent extends BaseAgent {
           label: plist.Label || fileName,
           risks,
           risk: riskLevel,
+          trust: {
+            spctlAccepted: signature.spctlAccepted,
+            teamIdentifier: signature.teamIdentifier,
+            signedByApple: signature.signedByApple,
+            signedByDeveloperId: signature.signedByDeveloperId
+          },
           description: `${type}: ${risks.join(', ')}`
         };
       }
