@@ -1,18 +1,50 @@
-# macOS System & Security Analysis Agent CLI
+# macOS System & Security Analysis Agent CLI (solid-cli)
 
-A **local-first** macOS security and performance analysis tool powered by AI. This CLI agent performs comprehensive system analysis and uses LLMs (OpenAI GPT-4 or Claude) to provide intelligent insights and recommendations.
+A **local-first** macOS security and performance analysis CLI. It runs a unified, adaptive set of analysis agents on your machine and can (optionally) use an LLM (Claude or OpenAI) to generate structured recommendations.
+
+> Note: LLM use is **optional**. When enabled, the CLI applies prompt sanitization and will **abort AI analysis** if sensitive patterns are detected.
+
+## 快速开始（Quick Start）
+
+```bash
+# Run once (no install)
+npx solid-cli
+
+# Or install globally
+npm install -g solid-cli
+solid-cli
+
+# Show help
+solid-cli --help
+```
+
+Optional (enable AI analysis):
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+# or
+export OPENAI_API_KEY=sk-...
+
+solid-cli
+```
+
+Reports are written to `./reports/<YYYY>/<Month>/` by default.
 
 ## Features
 
-- **Resource Usage Analysis**: Monitor CPU, memory, and I/O usage
-- **Security Scanning**: Comprehensive security audit including:
-  - System integrity checks (SIP, Gatekeeper)
-  - Persistence mechanism detection (LaunchAgents, LaunchDaemons, crontab)
+- **Unified Adaptive Analysis**: runs a core set of agents every time, then conditionally expands analysis (e.g. blockchain/DeFi) when indicators are detected.
+- **Core Security Coverage**:
+  - System integrity checks (SIP, Gatekeeper, updates)
+  - Persistence mechanism detection (LaunchAgents/LaunchDaemons, Login Items, crontab)
   - Process analysis for suspicious activity
-  - Network connection monitoring
+  - Network connection analysis (optionally enriched with IP geolocation)
   - Privacy permission auditing
-- **AI-Powered Analysis**: Get intelligent recommendations from OpenAI or Claude
-- **Professional Reports**: Export findings as Markdown or PDF
+- **Blockchain/DeFi Safety Add-on (adaptive)**: triggers wallet/DeFi threat checks only when crypto indicators are found.
+- **Privacy-protected AI insights (optional)**:
+  - Provider auto-detection (Claude preferred when both keys exist)
+  - Prompt sanitization + sensitive-pattern blocking
+  - Threshold-based skipping when findings are below configured triggers
+- **Professional Reports**: Markdown and/or PDF (Puppeteer) with templates.
+- **Structured Logging**: operational logs under `./logs/`.
 
 ## Architecture
 
@@ -21,356 +53,224 @@ A **local-first** macOS security and performance analysis tool powered by AI. Th
 │   CLI UI    │  inquirer + chalk
 └─────┬───────┘
       │
-┌─────▼──────────────┐
-│   Orchestrator     │  Agent coordination
-└─────┬──────────────┘
+┌─────▼────────────────────┐
+│   Orchestrator (Unified) │  Phase 1 core + Phase 2 adaptive
+└─────┬────────────────────┘
       │
- ┌────▼────┐  ┌──────▼────────┐  ┌────────▼──────┐
- │Resource │  │ Security Stack │  │   LLM Engine  │
- │ Agent   │  │ (5 Agents)     │  │ OpenAI/Claude │
- └─────────┘  └────────────────┘  └───────────────┘
-      │
- ┌─────▼───────────┐
-│ Report Manager  │ → Templates → Markdown/PDF
-└─────────────────┘
+ ┌────▼────┐  ┌───────────────▼───────────────┐
+ │ Core    │  │ Adaptive Agents (conditional) │
+ │ Agents  │  │ Blockchain / DeFi             │
+ └────┬────┘  └───────────────┬───────────────┘
+      │                        │
+┌─────▼───────────┐     ┌─────▼───────────┐
+│  LLM Analyzer    │     │ Report Manager  │
+│  (optional)      │     │ Markdown / PDF  │
+└──────────────────┘     └─────────────────┘
 ```
 
 ## Requirements
 
 - **macOS** 10.15 or later
 - **Node.js** 20.0 or later
-- **API Keys** (optional): OpenAI or Anthropic Claude
+- **API Keys** (optional): Anthropic Claude and/or OpenAI
 
 ## Installation
 
-### Install from npm (recommended for users)
+### Install from npm
 
 ```bash
 npm install -g solid-cli
-# or run once without installing
+solid-cli
+```
+
+Run once without installing:
+```bash
 npx solid-cli
-```
-
-Run the CLI with:
-```bash
-macos-analyze
-```
-
-Optional: add API keys as env vars before running:
-```bash
-export OPENAI_API_KEY=sk-...
-export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 ### Local development
 
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd solid-cli
-```
-
-2. Install dependencies:
 ```bash
 npm install
+npm start
 ```
 
-3. Set up API keys (optional, for AI analysis):
-```bash
-cp .env.example .env
-# Edit .env and add your API keys
-```
-
-4. Make the CLI executable:
+Optional: make the entry executable:
 ```bash
 chmod +x src/index.js
 ```
 
 ## Usage
 
-### Quick Start
-
 Run the interactive CLI:
+
 ```bash
+solid-cli
+# or, in this repo
 npm start
 ```
 
-Or directly:
+Show help:
 ```bash
-node src/index.js
+solid-cli --help
+# or
+npm start -- --help
 ```
 
-### Analysis Modes
+### What the CLI will ask (current flow)
 
-The CLI will prompt you to select:
+1. **LLM auto-detection** (no manual provider picker)
+   - If `ANTHROPIC_API_KEY` is present, the CLI uses **Claude**.
+   - Else if `OPENAI_API_KEY` is present, it uses **OpenAI**.
+   - Else it runs **report-only**.
+2. **AI analysis option**: you can still choose **AI analysis** or **report-only**.
+3. **Report format**: PDF or Markdown.
+4. **IP geolocation**: controlled by config (`security.enableGeoLookup`) and shown in the run summary.
+5. Analysis starts automatically (no extra confirmation prompt).
 
-1. **Analysis Mode**:
-   - ✅ Integrated Resource + Security Scan (Recommended)
-   - ⭕ Deep Forensics Analysis (Time-consuming)
+### Report output
 
-2. **LLM Provider**:
-   - OpenAI (GPT-4)
-   - Claude (Anthropic)
-   - No LLM - Generate report only
+- Default output root: `./reports` (configurable via `reports.outputDir`).
+- Directory layout: `./reports/<YYYY>/<Month>/`
+- Filenames:
+  - `Security-Report-<REPORT_ID>.md`
+  - `Security-Report-<REPORT_ID>.pdf`
+  - `metadata-<YYYY-MM-DD>.json`
 
-3. **Report Format**:
-    - Markdown (.md)
-    - PDF (.pdf)
-    - Both
+### Example run (illustrative)
 
-### Optional Geo Enrichment
+```text
+$ solid-cli
 
-When prompted, enable outbound IP geolocation to tag external connections. The CLI first tries local `geoiplookup`, then `ipinfo.io` (requires network). Skip if you need an offline-only run.
+✅ Claude (Anthropic) - API key detected
+? 🤖 AI Analysis Option: (Use arrow keys)
+  🧠 Use AI Analysis (CLAUDE) - Enhanced insights & recommendations
+  📋 Generate Security Report Only - Maximum privacy protection
 
-### LLM Optimization Guidance
+? Select report format: PDF (.pdf)
+✅ IP geolocation enabled
 
-LLM analysis considers both security findings and resource usage (CPU/memory) to suggest performance optimizations alongside mitigations.
+🔍 Starting unified adaptive analysis...
 
-### Example Workflow
-
-```
-$ npm start
-
-╔═══════════════════════════════════════════════════════════╗
-║   macOS System & Security Analysis Agent CLI              ║
-║   Powered by AI - Local-First Security Analysis           ║
-╚═══════════════════════════════════════════════════════════╝
-
-? Select analysis mode: Security Scan (Recommended)
-? Select LLM provider: Claude (Anthropic)
-? Select report format: Markdown, PDF
-? Proceed with analysis? Yes
-
-🔍 Starting system analysis...
-
+Phase 1: Core Security Analysis
 ✓ ResourceAgent completed - Risk: LOW
 ✓ SystemAgent completed - Risk: MEDIUM
-✓ PersistenceAgent completed - Risk: HIGH
-✓ ProcessAgent completed - Risk: MEDIUM
-✓ NetworkAgent completed - Risk: LOW
-✓ PermissionAgent completed - Risk: LOW
+...
 
-✅ Analysis completed!
-
-📊 Analysis Summary:
-──────────────────────────────────────────────────
-Overall Risk: HIGH
-Total Findings: 15
-  🔴 High Risk: 3
-  🟡 Medium Risk: 8
-  🟢 Low Risk: 4
-──────────────────────────────────────────────────
-
-🤖 Running AI analysis...
-✓ AI analysis completed!
+Phase 2: Adaptive Analysis
+   No blockchain indicators detected - skipping blockchain analysis
 
 📁 Saved Reports:
-   📄 Markdown: ./security-report-2024-12-26.md
-   📑 PDF: ./security-report-2024-12-26.pdf
-
-✨ Analysis complete! Check your reports for details.
+   📑 Pdf: reports/2025/December/Security-Report-RPT-XXXXXX.pdf
 ```
 
 ## Agents
 
-### 1. ResourceAgent
-Analyzes CPU, memory, and process resource usage.
+### Core agents (always run)
 
-**Detects**:
-- High CPU/memory usage from non-system paths
-- Suspicious process names
-- Long-running background processes
+- `ResourceAgent`: CPU/memory/process resource usage heuristics.
+- `SystemAgent`: SIP/Gatekeeper/updates and other system posture checks.
+- `PersistenceAgent`: LaunchAgents/LaunchDaemons/Login Items/crontab.
+- `ProcessAgent`: suspicious process patterns (paths, elevation, obfuscation).
+- `NetworkAgent`: network connections and listening ports; optional IP geolocation enrichment.
+- `PermissionAgent`: privacy permission auditing.
 
-### 2. SystemAgent
-Checks system integrity and security settings.
+### Adaptive agents (only run when indicators are detected)
 
-**Detects**:
-- SIP (System Integrity Protection) status
-- Gatekeeper status
-- Available system updates
-- Sudoers misconfigurations
-
-### 3. PersistenceAgent (Core Security)
-Scans for persistence mechanisms.
-
-**Detects**:
-- Suspicious LaunchAgents/LaunchDaemons
-- Login Items
-- Crontab entries
-- Programs in non-standard locations
-- Potential impersonation of Apple services
-
-### 4. ProcessAgent
-Analyzes running processes.
-
-**Detects**:
-- Process name/path mismatches
-- System processes running from user directories
-- Hidden or obfuscated process names
-- Elevated processes from user paths
-
-### 5. NetworkAgent
-Monitors network connections.
-
-**Detects**:
-- Suspicious port usage
-- Non-system processes with network activity
-- Listening on all interfaces
-- External connections from unusual processes
-
-### 6. PermissionAgent
-Audits app permissions.
-
-**Detects**:
-- Critical permissions granted to non-standard apps
-- Apps in user directories with permissions
-- Hidden apps with permissions
+- `BlockchainAgent`: wallet processes/files, wallet-like browser extensions, mining indicators, and blockchain/DeFi network patterns.
+- `DeFiSecurityAgent`: DeFi scam indicators (processes/download metadata/network) with privacy-protective behavior (no clipboard or browser-history content extraction).
 
 ## Configuration
 
-Create a `config.json` from the example:
-```bash
-cp config.example.json config.json
-```
+This project uses the `config` (node-config) package.
 
-Customize agent settings, thresholds, and trusted paths in the config file.
+- Defaults ship in `config/default.json`.
+- You can override settings by providing your own config directory in one of these ways:
+  - Create `./config/local.json` in the directory where you run `solid-cli`.
+  - Or set `NODE_CONFIG_DIR` to a custom config folder.
 
-## API Keys Setup
+Common settings:
 
-### OpenAI
-1. Get your API key from https://platform.openai.com/api-keys
-2. Add to `.env`:
-```
-OPENAI_API_KEY=sk-...
-```
+- `reports.outputDir`: report output directory (default `./reports`).
+- `analysis.parallelExecution` and `analysis.maxParallelAgents`: speed vs. load tradeoff.
+- `security.enableGeoLookup` and `security.geoLookupLimit`: IP geolocation enrichment behavior.
+- `llm.mode`: prompt mode (`summary` / `full`).
+- `llm.minHighRiskFindings`, `llm.minTotalFindings`, `llm.skipWhenBelowThreshold`: when AI analysis should run.
 
-### Anthropic Claude
-1. Get your API key from https://console.anthropic.com/settings/keys
-2. Add to `.env`:
-```
-ANTHROPIC_API_KEY=sk-ant-...
-```
+## AI / LLM behavior (privacy-protected)
 
-## Report Structure
-
-Generated reports include:
-
-1. **Executive Summary**: Overall risk assessment and key metrics
-2. **AI Analysis** (if enabled): Intelligent insights and recommendations
-3. **Detailed Findings**: Per-agent results with risk classifications
-4. **Appendix**: Raw JSON data for further analysis
+- **Provider auto-detection priority**: Claude → OpenAI → none.
+- Before any LLM call, the CLI:
+  - builds a prompt from analysis results,
+  - runs a **sensitive pattern scan**,
+  - and **skips AI analysis** (and records details into report metadata) if sensitive patterns are detected.
+- When AI analysis runs, request/response payloads are logged under `./logs/llm-requests/`.
 
 ## Security Considerations
 
-- **No Root Required**: All checks run with user permissions
-- **Local-First**: Your data stays on your machine
-- **API Usage**: LLM providers only receive analysis results (no raw system data)
-- **Read-Only**: No system modifications are made
+- **No Root Required**: checks run with user permissions.
+- **Local-First**: analysis runs locally; AI is optional.
+- **Read-only**: the tool does not modify system settings.
+- **LLM Safety**: sensitive pattern detection can prevent accidental leakage of keys/tokens.
+
+## Troubleshooting
+
+### Permission prompts / incomplete results
+
+Some checks may be limited without:
+- **Full Disk Access** (e.g. some system databases)
+- **Accessibility** (some process visibility)
+
+### PDF generation fails
+
+PDF uses Puppeteer. If Chromium cannot launch:
+- reinstall dependencies so Puppeteer can fetch Chromium, or
+- set `PUPPETEER_EXECUTABLE_PATH` to a local Chrome/Chromium.
 
 ## Development
 
 ### Project Structure
-```
+
+```text
 solid-cli/
+├── config/
+│   └── default.json              # node-config defaults
 ├── src/
-│   ├── agents/          # Analysis agents
-│   │   ├── BaseAgent.js
-│   │   ├── ResourceAgent.js
-│   │   ├── SystemAgent.js
-│   │   ├── PersistenceAgent.js
-│   │   ├── ProcessAgent.js
-│   │   ├── NetworkAgent.js
-│   │   └── PermissionAgent.js
-│   ├── llm/             # LLM integration
-│   │   └── LLMAnalyzer.js
-│   ├── report/          # Report generation (Handlebars + Puppeteer)
-│   │   ├── ReportManager.js
-│   │   ├── generators/
-│   │   │   ├── MarkdownGenerator.js
-│   │   │   └── PDFGenerator.js
-│   │   ├── templates/
-│   │   ├── styles/
-│   │   └── utils/
-│   ├── utils/           # Utilities
-│   │   └── commander.js
-│   ├── Orchestrator.js  # Agent coordination
-│   └── index.js         # CLI entry point
-├── package.json
-├── .env.example
+│   ├── agents/                   # analysis agents
+│   ├── config/ConfigManager.js   # config access/validation
+│   ├── llm/LLMAnalyzer.js        # LLM prompt building + safety checks
+│   ├── logging/Logger.js         # structured logging
+│   ├── report/                   # report generation (Handlebars + Puppeteer)
+│   ├── utils/                    # shell helpers, signatures, etc.
+│   ├── Orchestrator.js           # unified adaptive runner
+│   └── index.js                  # CLI entry point
+├── reports/                      # generated reports (gitignored typically)
+├── logs/                         # generated logs (gitignored typically)
 └── README.md
 ```
 
-### Adding Custom Agents
+### Adding custom agents
 
-1. Create a new agent extending `BaseAgent`:
-```javascript
-import { BaseAgent } from './BaseAgent.js';
-
-export class CustomAgent extends BaseAgent {
-  constructor() {
-    super('CustomAgent');
-  }
-
-  async analyze() {
-    // Your analysis logic
-    this.results = {
-      agent: this.name,
-      findings: [],
-      overallRisk: 'low'
-    };
-    return this.results;
-  }
-}
-```
-
-2. Register in `Orchestrator.js`
-
-## Troubleshooting
-
-### Permission Errors
-Some checks require specific permissions:
-- **Full Disk Access**: For TCC database access
-- **Accessibility**: For some process inspections
-
-Grant these in System Preferences > Security & Privacy > Privacy
-
-### PDF Generation Fails
-Puppeteer generates PDFs. If it cannot launch a browser, reinstall dependencies to fetch Chromium or set `PUPPETEER_EXECUTABLE_PATH` to a local Chrome/Chromium binary.
-
-### API Rate Limits
-If you encounter rate limits:
-- Use shorter analysis windows
-- Select specific agents only
-- Run in "No LLM" mode and analyze JSON manually
+1. Create a new agent extending `BaseAgent` and implement `analyze()`.
+2. Register it in `src/Orchestrator.js` (core or conditional).
 
 ## Publishing to npm (maintainers)
 
-1. Update `package.json` metadata (name/scope, version, repository, bugs, homepage) before publishing.
-2. Clean artifacts: `rm -rf logs reports *.tgz` to keep the tarball minimal.
-3. Verify the package contents (controlled by `files` and `.npmignore`): `npm pack --dry-run`.
-4. Run smoke tests: `node test-basic.js` and `node test-logging.js` (then remove `logs/llm-requests/request-*.json` if created).
-5. Publish: `npm publish --access public` (or add `--tag beta` / `--registry <url>` for prerelease or private registries).
-6. After publishing, record the new version and update the changelog/release notes if applicable.
-
-## Contributing
-
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Submit a pull request
+1. Update `package.json` metadata (name/scope, version, repository, bugs, homepage).
+2. Clean artifacts: remove generated `logs/` and `reports/` before packing.
+3. Verify package contents: `npm pack --dry-run`.
+4. Smoke tests (non-interactive helpers):
+   - `node src/index.js --help`
+   - `node test-llm-choice.js`
+   - `node test-llm-blocking.js`
+   - `node test-llm-privacy.js`
+   - `node test-blockchain.js`
+5. Publish: `npm publish --access public`.
 
 ## License
 
-MIT License - See LICENSE file for details
+MIT License - see `LICENSE`.
 
 ## Disclaimer
 
 This tool is for legitimate security analysis and system auditing only. Users are responsible for compliance with applicable laws and regulations. The authors assume no liability for misuse.
-
-## Support
-
-For issues, questions, or feature requests, please open an issue on GitHub.
-
----
-
-**Built with**: Node.js, inquirer, chalk, execa, OpenAI, Anthropic Claude
