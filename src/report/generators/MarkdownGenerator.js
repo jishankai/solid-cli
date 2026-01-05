@@ -1,7 +1,12 @@
 import { promises as fs } from 'fs';
-import { join } from 'path';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 import { readFileSync } from 'fs';
 import handlebars from 'handlebars';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const DEFAULT_TEMPLATE_DIR = join(__dirname, '..', 'templates');
 
 /**
  * Enhanced Markdown Generator with templates
@@ -9,7 +14,7 @@ import handlebars from 'handlebars';
 export class MarkdownGenerator {
   constructor(options = {}) {
     this.options = {
-      templateDir: './src/report/templates',
+      templateDir: DEFAULT_TEMPLATE_DIR,
       ...options
     };
   }

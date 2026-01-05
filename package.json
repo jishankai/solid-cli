@@ -1,6 +1,6 @@
 {
   "name": "@jishankai/solid-cli",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "MacOS System & Security Analysis Agent CLI with LLM-powered insights",
   "type": "module",
   "main": "src/index.js",

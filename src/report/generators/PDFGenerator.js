@@ -1,8 +1,14 @@
 import puppeteer from 'puppeteer';
 import { promises as fs } from 'fs';
-import { join } from 'path';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 import { readFileSync } from 'fs';
 import handlebars from 'handlebars';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const DEFAULT_TEMPLATE_DIR = join(__dirname, '..', 'templates');
+const DEFAULT_STYLE_DIR = join(__dirname, '..', 'styles');
 
 /**
  * Enhanced PDF Generator using Puppeteer
@@ -10,8 +16,8 @@ import handlebars from 'handlebars';
 export class PDFGenerator {
   constructor(options = {}) {
     this.options = {
-      styleDir: './src/report/styles',
-      templateDir: './src/report/templates',
+      styleDir: DEFAULT_STYLE_DIR,
+      templateDir: DEFAULT_TEMPLATE_DIR,
       ...options
     };
   }

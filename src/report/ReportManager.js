@@ -1,11 +1,17 @@
 import { promises as fs } from 'fs';
-import { join } from 'path';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 import puppeteer from 'puppeteer';
 import handlebars from 'handlebars';
 import { PDFGenerator } from './generators/PDFGenerator.js';
 import { MarkdownGenerator } from './generators/MarkdownGenerator.js';
 import { ReportSanitizer } from './utils/sanitizer.js';
 import { ReportFormatter } from './utils/formatter.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const DEFAULT_TEMPLATE_DIR = join(__dirname, 'templates');
+const DEFAULT_STYLE_DIR = join(__dirname, 'styles');
 
 /**
  * Enhanced Report Manager - Professional report generation with templates
@@ -21,8 +27,8 @@ export class ReportManager {
     this.llmAnalysis = llmAnalysis;
     this.options = {
       reportsDir: './reports',
-      templateDir: './src/report/templates',
-      styleDir: './src/report/styles',
+      templateDir: DEFAULT_TEMPLATE_DIR,
+      styleDir: DEFAULT_STYLE_DIR,
       retentionDays: 90,
       defaultTemplate: 'executive',
       ...options
